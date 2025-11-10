@@ -1,101 +1,81 @@
 import streamlit as st
-import folium
-import osmnx as ox
-from streamlit_folium import st_folium
-from geopy.distance import geodesic
+from PIL import Image, ImageDraw
 import time
-import pandas as pd
+import math
 
-st.set_page_config(page_title="TrainSafe Real Route", layout="wide")
-st.title("🚆 Smart Train Safety Dashboard — Indian Southern Railways")
-st.markdown("**Route Demo:** Chennai – Bangalore | Real OSM Railway Route**")
+# --- Page Setup ---
+st.set_page_config(page_title="Train Simulator", layout="wide")
+st.markdown("## 🚆 Smart Train Safety Simulation – Chennai Division")
 
-# --- 1. Load route only once ---
-if "rail_route" not in st.session_state:
-    with st.spinner("Fetching real railway data from OpenStreetMap..."):
-        # Fetch railway track between Chennai and Bangalore
-        G = ox.graph_from_place("Tamil Nadu, India", network_type="all")
-        edges = ox.graph_to_gdfs(G, nodes=False)
-        rail_edges = edges[edges["railway"].notnull()]
-        # Filter roughly along Chennai–Bangalore region
-        route = rail_edges[(rail_edges["geometry"].bounds.minx > 77.5) & (rail_edges["geometry"].bounds.maxx < 80.5)]
-        st.session_state.rail_route = route
-        st.session_state.base_map = folium.Map(location=[12.95, 79.95], zoom_start=8, tiles="OpenStreetMap")
-        for _, row in route.iterrows():
-            folium.PolyLine(
-                locations=[(pt[1], pt[0]) for pt in row["geometry"].coords],
-                color="gray", weight=2, opacity=0.7
-            ).add_to(st.session_state.base_map)
+# --- Load assets ---
+train_icon = Image.open("assets/train.png").resize((80, 80))
+track_bg = Image.new("RGB", (800, 300), (200, 200, 200))
+draw = ImageDraw.Draw(track_bg)
+# draw rails
+for i in range(0, 300, 50):
+    draw.line([(0, i + 25), (800, i + 25)], fill="gray", width=3)
 
-# --- 2. Train initial data ---
-if "train_data" not in st.session_state:
-    st.session_state.train_data = pd.DataFrame([
-        {"name": "Train_1", "route": "Chennai–Bangalore", "lat": 13.0827, "lon": 80.2707, "speed": 85, "track": 2},
-        {"name": "Train_2", "route": "Kovai–Madurai", "lat": 12.9827, "lon": 80.0707, "speed": 75, "track": 1}
-    ])
+# --- Sidebar Metrics ---
+with st.sidebar:
+    st.header("📊 Live Train Data")
+    speed = st.slider("Speed (km/h)", 0, 120, 80)
+    distance = st.number_input("Distance to Next Train (km)", 30.0, 100.0, 40.0, 0.1)
+    signal = st.selectbox("Signal Status", ["GREEN", "YELLOW", "RED"])
+    st.write("---")
+    st.metric("Current Speed", f"{speed} km/h")
+    st.metric("Next Train Distance", f"{distance} km")
+    st.metric("Signal", signal)
 
-# --- 3. Simulation control ---
-cols = st.columns([1, 1, 3])
-start = cols[0].button("▶ Start")
-stop = cols[1].button("■ Stop")
-reset = cols[2].button("↺ Reset")
+# --- Animation Settings ---
+start_btn = st.button("▶ Start Simulation")
+stop_btn = st.button("■ Stop")
 
 if "running" not in st.session_state:
     st.session_state.running = False
-if start:
+if start_btn:
     st.session_state.running = True
-if stop:
-    st.session_state.running = False
-if reset:
-    st.session_state.train_data.loc[0, ["lat", "lon"]] = [13.0827, 80.2707]
-    st.session_state.train_data.loc[1, ["lat", "lon"]] = [12.9827, 80.0707]
+if stop_btn:
     st.session_state.running = False
 
-# --- 4. Display persistent map ---
-with st.container():
-    map_placeholder = st.empty()
-    m = st.session_state.base_map
+# --- Canvas Area ---
+canvas = st.empty()
+info_area = st.empty()
 
-    # Add markers for current positions
-    for _, row in st.session_state.train_data.iterrows():
-        folium.Marker(
-            location=[row["lat"], row["lon"]],
-            popup=f"{row['name']} ({row['route']})<br>Speed: {row['speed']} km/h",
-            icon=folium.Icon(color="red" if row["speed"] == 0 else "green", icon="train", prefix="fa")
-        ).add_to(m)
+# --- Simulation Loop ---
+pos_x = 0
+direction = 1  # rightward
+fps = 30
+train_y = 150  # fixed on middle track
 
-    st_folium(m, width=950, height=600, key="live_map")
+while st.session_state.running:
+    frame = track_bg.copy()
+    frame.paste(train_icon, (int(pos_x), train_y - 40), train_icon)
 
-# --- 5. Logic to move trains on same map ---
-def move_train(lat, lon, dest_lat, dest_lon, step_km):
-    dist = geodesic((lat, lon), (dest_lat, dest_lon)).km
-    if dist == 0 or step_km >= dist:
-        return dest_lat, dest_lon
-    frac = step_km / dist
-    new_lat = lat + (dest_lat - lat) * frac
-    new_lon = lon + (dest_lon - lon) * frac
-    return new_lat, new_lon
+    # update position
+    pos_x += direction * (speed / 10)
+    if pos_x >= 720:
+        direction = -1
+        st.warning("🚦 Reached Station — changing direction!")
+    elif pos_x <= 0:
+        direction = 1
 
-# --- 6. Update simulation ---
-if st.session_state.running:
-    for i in range(100):  # limited steps
-        # Move train 1 north-west (towards Bangalore approx)
-        t1 = st.session_state.train_data.loc[0]
-        new_lat, new_lon = move_train(t1["lat"], t1["lon"], 12.97, 77.59, t1["speed"] * 0.001)
-        st.session_state.train_data.loc[0, ["lat", "lon"]] = [new_lat, new_lon]
+    # Draw additional info on frame
+    d = ImageDraw.Draw(frame)
+    d.text((10, 10), "Track: 2 | Route: Chennai–Bangalore", fill="black")
+    d.text((10, 40), f"Speed: {speed} km/h", fill="black")
+    d.text((10, 70), f"Signal: {signal}", fill="black")
 
-        # Move train 2 slightly south (simulate crossing)
-        t2 = st.session_state.train_data.loc[1]
-        new_lat2, new_lon2 = move_train(t2["lat"], t2["lon"], 9.92, 78.12, t2["speed"] * 0.001)
-        st.session_state.train_data.loc[1, ["lat", "lon"]] = [new_lat2, new_lon2]
+    # Alert logic
+    if signal == "RED" or distance < 10:
+        st.error("🚨 ALERT: Stop immediately – train ahead or red signal!")
+        speed = 0
 
-        # Safety check
-        dist = geodesic((new_lat, new_lon), (new_lat2, new_lon2)).km
-        if dist < 10:
-            st.warning(f"🚨 Collision risk: {t1['name']} & {t2['name']} within {dist:.2f} km!")
-            st.session_state.train_data.loc[0, "speed"] = 0
-        else:
-            st.success(f"✅ Safe operation — distance: {dist:.2f} km")
+    canvas.image(frame)
+    time.sleep(1 / fps)
 
-        time.sleep(0.8)
-        st.experimental_rerun()
+# --- Stopped Display ---
+if not st.session_state.running:
+    frame = track_bg.copy()
+    frame.paste(train_icon, (int(pos_x), train_y - 40), train_icon)
+    canvas.image(frame)
+    info_area.info("🟢 Ready for next simulation run.")
