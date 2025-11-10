@@ -1,86 +1,61 @@
 import streamlit as st
-import json
+import pandas as pd
+import folium
+from streamlit_folium import st_folium
+from geopy.distance import geodesic
 import time
 import math
-from geopy.distance import geodesic
 
-st.set_page_config(page_title="Smart Train Safety Dashboard", layout="wide")
+# Streamlit page config
+st.set_page_config(page_title="TrainSafe Live Dashboard", layout="wide")
 
-st.markdown("## 🚆 Indian Southern Railways Limited")
-st.markdown("#### Chennai – Mumbai | Train No: 64521")
+st.title("🚆 TrainSafe Live System – Indian Southern Railways")
+st.markdown("**Train No: 64521 | Chennai – Mumbai**")
 
-# --- Load train data ---
-with open("trains_data.json") as f:
-    trains = json.load(f)
+# --- Load Train Data ---
+data = pd.DataFrame([
+    {"name": "Train 1", "route": "Chennai–Bangalore", "lat": 13.0827, "lon": 80.2707, "speed": 85, "track": 2},
+    {"name": "Train 2", "route": "Kovai–Madurai", "lat": 12.9827, "lon": 80.0707, "speed": 0, "track": 1},
+    {"name": "Train 3", "route": "Chennai–Mumbai", "lat": 13.5, "lon": 79.8, "speed": 90, "track": 3}
+])
 
-# Simulation speed (to visualize movement)
-refresh_rate = 1  # seconds
-speed_factor = 0.03  # control animation step
+# --- Setup Map ---
+m = folium.Map(location=[13.0, 80.1], zoom_start=8, tiles="OpenStreetMap")
 
-# Canvas setup
-canvas = st.empty()
-info_col, status_col = st.columns([2, 1])
+# Add tracks (simple colored polylines)
+track_colors = {1: "blue", 2: "red", 3: "green", 4: "orange"}
+for t in range(1, 5):
+    lat_shift = 0.05 * (t - 2)  # separate tracks slightly
+    folium.PolyLine(
+        [(12.5 + lat_shift, 79.7), (13.5 + lat_shift, 80.3)],
+        color=track_colors[t], weight=3, opacity=0.7, tooltip=f"Track {t}"
+    ).add_to(m)
 
-def calc_distance(a, b):
-    return geodesic((a["lat"], a["lon"]), (b["lat"], b["lon"])).km
+# --- Add Trains ---
+for _, row in data.iterrows():
+    folium.Marker(
+        location=[row["lat"], row["lon"]],
+        popup=f"{row['name']} ({row['route']})<br>Speed: {row['speed']} km/h<br>Track: {row['track']}",
+        icon=folium.Icon(color="red" if row["speed"] == 0 else "green", icon="train", prefix="fa")
+    ).add_to(m)
 
-def meeting_time(dist, s1, s2):
-    avg_speed = (s1 + s2) / 2
-    return round(dist / avg_speed * 60, 2) if avg_speed > 0 else 0
+# Display map
+st_folium(m, width=1000, height=550)
 
-# --- Layout Drawing ---
-def draw_dashboard(trains):
-    with canvas.container():
-        st.markdown("---")
-        st.write("#### 🚉 Track Overview (Top View)")
-        st.write("")
-        st.write("Track 1 | ---------------------- 🚆" if trains["Train_1"]["moving"] else "Track 1 | 🚦 STOP 🚆")
-        st.write("Track 2 | ---------------------- 🚆" if trains["Train_2"]["moving"] else "Track 2 | 🚦 STOP 🚆")
-        st.write("Track 3 | ---------------------- ")
-        st.write("Track 4 | ---------------------- ")
-        st.markdown("---")
+# --- Alerts and Data Section ---
+st.subheader("📡 Live Train Information")
+for i, row in data.iterrows():
+    status = "🟥 STOPPED" if row["speed"] == 0 else "🟩 MOVING"
+    st.write(f"**{row['name']}** — {row['route']} | {status} | Track {row['track']} | {row['speed']} km/h")
 
-    with info_col:
-        st.markdown("### 🧭 Live Train Details")
-        for name, t in trains.items():
-            st.write(f"**{name}** — {t['route']}")
-            st.write(f"📍 Distance Away: {t['distance']} km | 🛤 Track: {t['track']}")
-            if t["moving"]:
-                st.success(f"💨 Speed: {t['speed']} km/h | ETA: {t['eta']} mins")
-            else:
-                st.error("🚦 Waiting for Clearance")
-            st.markdown("---")
+# --- Simple Collision Check ---
+train1 = data.iloc[0]
+train2 = data.iloc[1]
+dist = geodesic((train1["lat"], train1["lon"]), (train2["lat"], train2["lon"])).km
 
-    with status_col:
-        st.markdown("### ⚙️ System Status")
-        st.write(f"Current Time: {time.strftime('%H:%M:%S')}")
-        st.write("Active Trains: ", len(trains))
-        st.write("Track Health: ✅ Stable")
-        st.markdown("---")
+if dist < 10 and train1["track"] == train2["track"]:
+    st.error(f"🚨 ALERT: {train1['name']} and {train2['name']} are within {dist:.1f} km on the same track!")
+else:
+    st.success(f"✅ Safe distance between trains: {dist:.1f} km")
 
-# --- Core Logic ---
-while True:
-    # Compute distances
-    dist = calc_distance(trains["Train_1"], trains["Train_2"])
-    eta = meeting_time(dist, trains["Train_1"]["speed"], trains["Train_2"]["speed"])
-
-    # Decision logic
-    if dist < 10 and trains["Train_1"]["track"] == trains["Train_2"]["track"]:
-        trains["Train_1"]["moving"] = False
-        trains["Train_2"]["moving"] = True
-        msg = "🚨 ALERT: Trains too close — Train 1 halted to let Train 2 cross!"
-    else:
-        trains["Train_1"]["moving"] = True
-        trains["Train_2"]["moving"] = True
-        msg = "✅ Safe — Trains operating normally."
-
-    for t in trains.values():
-        t["eta"] = eta
-        if t["moving"]:
-            t["distance"] = max(0, t["distance"] - (t["speed"] * speed_factor))
-        else:
-            t["speed"] = 0
-
-    st.info(msg)
-    draw_dashboard(trains)
-    time.sleep(refresh_rate)
+st.caption(f"🕒 Last updated: {time.strftime('%H:%M:%S')} | Data simulated from OSM route paths")
