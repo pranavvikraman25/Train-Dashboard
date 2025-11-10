@@ -1,0 +1,20 @@
+{
+  "Train_1": {
+    "route": "Chennai - Bangalore",
+    "lat": 13.0827,
+    "lon": 80.2707,
+    "speed": 85,
+    "distance": 40,
+    "track": 2,
+    "moving": true
+  },
+  "Train_2": {
+    "route": "Kovai - Madurai",
+    "lat": 13.0927,
+    "lon": 80.2785,
+    "speed": 75,
+    "distance": 30,
+    "track": 1,
+    "moving": true
+  }
+}
