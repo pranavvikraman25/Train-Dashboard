@@ -4,10 +4,10 @@ import folium
 from streamlit_folium import st_folium
 
 # Streamlit page setup
-st.set_page_config(page_title="TrainSafe — Indian Railways", layout="wide")
+st.set_page_config(page_title="RoadSafe - Roadways Tamil Nadu", layout="wide")
 
-st.title("🚄 TrainSafe — Real-Time Railway Collision Prevention System")
-st.markdown("### Chennai Central – Perambur Line | Short Route Demo")
+st.title("🚄 RoadSafe — Real-Time Short Path Finding System")
+st.markdown("### Chennai Central – Perambur RoadLine | Short Route Demo")
 
 # Load the demo GeoJSON route
 try:
@@ -24,7 +24,7 @@ m = folium.Map(location=[13.09, 80.26], zoom_start=13, tiles="cartodb positron")
 folium.GeoJson(
     route_data,
     name="Chennai–Perambur Route",
-    tooltip="Railway Line: Chennai Central → Perambur",
+    tooltip="Road Line: Chennai Central → Perambur",
     style_function=lambda x: {"color": "blue", "weight": 4},
 ).add_to(m)
 
@@ -35,13 +35,13 @@ train_b = [13.1750, 80.1910]  # Perambur end
 # Add train markers
 folium.Marker(
     train_a,
-    tooltip="🚄 Train A — Chennai Express (Departing)",
+    tooltip="🚄 Road A — Chennai Express (Departing)",
     icon=folium.Icon(color="green", icon="train", prefix="fa")
 ).add_to(m)
 
 folium.Marker(
     train_b,
-    tooltip="🚉 Train B — Perambur Local (Arriving)",
+    tooltip="🚉 Road B — Perambur Local (Arriving)",
     icon=folium.Icon(color="red", icon="train", prefix="fa")
 ).add_to(m)
 
@@ -53,10 +53,10 @@ st.markdown("""
 ---
 ### 🔧 Project Info
 
-**TrainSafe** aims to prevent railway accidents by enabling real-time train-to-train communication and live map visualization.
+**Road** aims to prevent railway accidents by enabling real-time train-to-train communication and live map visualization.
 
 **This demo shows:**
-- The real Chennai Central → Perambur track section  
+- The real Chennai Central → Perambur Line section  
 - Two trains shown as static markers  
 - Folium & OpenStreetMap integration inside Streamlit  
 
